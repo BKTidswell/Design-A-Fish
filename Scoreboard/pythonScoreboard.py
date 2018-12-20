@@ -27,22 +27,22 @@ class Example(QWidget):
 		(NumString,NameString,SpeedString,TypeString) = self.changeTimeFrame()
 
 		self.typeLabel = QLabel(TypeString, self)
-		self.typeLabel.move(90, 10)
+		self.typeLabel.move(140, 10)
 		self.typeLabel.setFont(QFont('Arial', 40))
 
 		self.numLabel = QLabel(NumString, self)
-		self.numLabel.move(10, 60)
+		self.numLabel.move(10, 70)
 		self.numLabel.setFont(labelFont)
 
 		self.nameLabel = QLabel(NameString, self)
-		self.nameLabel.move(60, 60)
+		self.nameLabel.move(65, 70)
 		self.nameLabel.setFont(labelFont)
 
 		self.speedLabel = QLabel(SpeedString, self)
-		self.speedLabel.move(200, 60)  
+		self.speedLabel.move(300, 70)  
 		self.speedLabel.setFont(labelFont)   
 		
-		self.setGeometry(300, 300, 300, 430)
+		self.setGeometry(300, 300, 410, 550)
 		self.setWindowTitle('Scoreboard')    
 
 		self.show()
