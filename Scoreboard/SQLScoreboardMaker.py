@@ -4,7 +4,10 @@ from random import *
 conn = sqlite3.connect('scoreboard.db')
 print("Opened database successfully")
 
-conn.execute("DROP TABLE SCORES")
+try:
+   conn.execute("DROP TABLE SCORES")
+except:
+   pass
 
 conn.execute('''CREATE TABLE SCORES
          (ID INT PRIMARY KEY     NOT NULL,

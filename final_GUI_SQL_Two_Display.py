@@ -15,15 +15,17 @@ import sqlite3
 # plugged in the new IR detector to beamPins and you should be good to go.
 
 # Sets the beam pin numbers
-beamPinsArray = [[8,10,12,16,18,22],[3,5,7,11,13,15]]
+#beamPinsArray = [[8,10,12,16,18,22],[3,5,7,11,13,15]]
+beamPinsArray = [[22,18,16,12,10,8],[15,13,11,7,5,3]]
 
 #The distances here are in centimeters, and should be the
 # distances between the different IR recievers in order to
 # correctly calculate the speeds
-distArrays = [[5.5,64.5,8,67,8.5],[5.5,64.5,8,67,8.5]]
+#distArrays = [[8.5,52.5,11.5,39.5,7],[8.5,52.5,11.5,39.5,7]]
+distArrays = [[7,39.5,11.5,52.5,8.5],[7,39.5,11.5,52.5,8.5]]
 
 # Setting position Values
-rows = [10,75,125,175,225,350,475]
+rows = [10,75,125,175,225]
 cols = [10,100,200,300,425,525,615]
 
 # Sets GPIO numbering mode and defines input PIN
@@ -34,38 +36,47 @@ for beamPins in beamPinsArray:
 
 class BeamGUI(QWidget):
 
-    def __init__(self, materialType, bodyType, spineType):
+    def __init__(self):
         super().__init__()
-        self.materialTypes = [materialType,materialType]
-        self.bodyTypes = [bodyType,bodyType]
-        self.spineTypes = [spineType,spineType]
+        #initializes varibles that will be needed in different
+        # functions and places
+        self.materialTypes = ["- - -","- - -"]
+        self.bodyTypes = ["- - -","- - -"]
+        self.spineTypes = ["- - -","- - -"]
+        self.FinShapes = ["- - -","- - -"]
+        self.TailShapes = ["- - -","- - -"]
+        self.SpecialFish = ["- - -","- - -"]
         self.names = ["",""]
         self.firstData = True
         self.initUI()
         self.last_call = 0
 
+        #Time data for the SQL
         now = datetime.datetime.now()
         self.month = now.month
         self.day = now.day
-        
-        self.maxSpeed = 30
-        self.R = 255
-        self.G = 255
-        self.B = 255
+    
+##        self.maxSpeed = 30
+##        self.R = 255
+##        self.G = 255
+##        self.B = 255
 
         self.states = [0,0]
 
     def initUI(self):
         
         #Creates the labels for the drop downs
-        comboLbls = [QLabel("Body Type", self),QLabel("Material Type", self),QLabel("Spine Type", self),
-                     QLabel("Body Type", self),QLabel("Material Type", self),QLabel("Spine Type", self)]
+        comboLbls = [[QLabel("Body Type", self),QLabel("Material Type", self),QLabel("Fin Type", self),
+                     QLabel("Body Type", self),QLabel("Material Type", self),QLabel("Fin Type", self)],
+                     [QLabel("Tail Shape", self),QLabel("Fin Height", self),QLabel("Special?", self),
+                     QLabel("Tail Shape", self),QLabel("Fin Height", self),QLabel("Special?", self)]]
         
-        for x in range(len(comboLbls)):
-            if x < 3:
-                comboLbls[x].move(cols[x], rows[0])
-            else:
-                comboLbls[x].move(cols[x+1], rows[0])
+        for i in range(2):
+            for j in range(len(comboLbls[i])):
+                if j < 3:
+                    comboLbls[i][j].move(cols[j], rows[i])
+                else:
+                    comboLbls[i][j].move(cols[j+1], rows[i])
 
         #Creates the body drop down menu
         bodyCombos = [QComboBox(self),QComboBox(self)]
@@ -83,8 +94,8 @@ class BeamGUI(QWidget):
         for mc in materialCombos:
             mc.addItem("- - -")
             mc.addItem("Pink")
-            mc.addItem("Orange")
             mc.addItem("Yellow")
+            mc.addItem("Blue")
 
         materialCombos[0].move(cols[1], rows[0]+15)
         materialCombos[1].move(cols[5], rows[0]+15)
@@ -100,11 +111,44 @@ class BeamGUI(QWidget):
         spineCombos[0].move(cols[2], rows[0]+15)
         spineCombos[1].move(cols[6], rows[0]+15)
 
+        #Creates the tail shape drop down menu
+        tailCombos = [QComboBox(self),QComboBox(self)]
+        for tc in tailCombos:
+            tc.addItem("- - -")
+            tc.addItem("Forked")
+            tc.addItem("Convex")
+            tc.addItem("Asymetric")
+            tc.addItem("Flat")
+
+        tailCombos[0].move(cols[0], rows[1]+15)
+        tailCombos[1].move(cols[4], rows[1]+15)
+
+        #Creates the material drop down menu
+        finCombos = [QComboBox(self),QComboBox(self)]
+        for fc in finCombos:
+            fc.addItem("- - -")
+            fc.addItem("Tall")
+            fc.addItem("Medium")
+            fc.addItem("Short")
+
+        finCombos[0].move(cols[1], rows[1]+15)
+        finCombos[1].move(cols[5], rows[1]+15)
+
+        #Creates the spine drop down menu
+        specialCombos = [QComboBox(self),QComboBox(self)]
+        for sc in specialCombos:
+            sc.addItem("- - -")
+            sc.addItem("Yes")
+            sc.addItem("No")
+
+        specialCombos[0].move(cols[2], rows[1]+15)
+        specialCombos[1].move(cols[6], rows[1]+15)
+
         #adds textbox for name entry
         self.nameBoxes = [QLineEdit(self),QLineEdit(self)]
 
-        self.nameBoxes[0].move(cols[0], rows[1])
-        self.nameBoxes[1].move(cols[4], rows[1])
+        self.nameBoxes[0].move(cols[0], rows[2])
+        self.nameBoxes[1].move(cols[4], rows[2])
 
         #adds buttons to enter names
 
@@ -112,14 +156,17 @@ class BeamGUI(QWidget):
         for i in range(2):
             self.nameButtons[i].clicked.connect(lambda state, x=i: self.enterName(x))
 
-        self.nameButtons[0].move(cols[2], rows[1])
-        self.nameButtons[1].move(cols[6], rows[1])
+        self.nameButtons[0].move(cols[2], rows[2])
+        self.nameButtons[1].move(cols[6], rows[2])
 
         #Attaches the functions to the drops downs
         for i in range(2):
             bodyCombos[i].activated[str].connect(lambda str, x=i: self.changeBody(str, x))
             materialCombos[i].activated[str].connect(lambda str, x=i: self.changeMaterial(str, x))
             spineCombos[i].activated[str].connect(lambda str, x=i: self.changeSpine(str, x))
+            tailCombos[i].activated[str].connect(lambda str, x=i: self.changeTail(str, x))
+            finCombos[i].activated[str].connect(lambda str, x=i: self.changeFin(str, x))
+            specialCombos[i].activated[str].connect(lambda str, x=i: self.changeSpecial(str, x))
 
         #Creates the buttons to check the beams and start the trial
         self.goButtons = [QPushButton("GO Floaty 1", self),QPushButton("GO Floaty 2", self),
@@ -128,9 +175,9 @@ class BeamGUI(QWidget):
         for gb in self.goButtons:
             gb.setStyleSheet("background-color: green")
             
-        self.goButtons[0].move(cols[0],rows[2])
-        self.goButtons[1].move(cols[4],rows[2])
-        self.goButtons[2].move(cols[3],rows[4])
+        self.goButtons[0].move(cols[0],rows[3])
+        self.goButtons[1].move(cols[4],rows[3])
+        self.goButtons[2].move(cols[3],rows[3])
 
         self.cancelButtons = [QPushButton("Cancel Floaty 1", self),QPushButton("Cancel Floaty 2", self),
                           QPushButton("CANCEL ALL", self)]
@@ -138,9 +185,9 @@ class BeamGUI(QWidget):
         for cb in self.cancelButtons:
             cb.setStyleSheet("background-color: red")
             
-        self.cancelButtons[0].move(cols[0],rows[3])
-        self.cancelButtons[1].move(cols[4],rows[3])
-        self.cancelButtons[2].move(cols[3],rows[5])
+        self.cancelButtons[0].move(cols[0],rows[4])
+        self.cancelButtons[1].move(cols[4],rows[4])
+        self.cancelButtons[2].move(cols[3],rows[4])
 
         setupButton = QPushButton("Check Beams", self)
         setupButton.move(cols[3],rows[0])
@@ -162,23 +209,9 @@ class BeamGUI(QWidget):
 
         #Makes font
         newfont = QtGui.QFont("Times", 40, QtGui.QFont.Bold)
-
-        #Creates Time Labels
-        self.timeLbls = [QLabel("Time:",self),QLabel("Time:",self)]
-        self.timeLbls[0].move(cols[0], rows[4])
-        self.timeLbls[0].setFont(newfont)
-        self.timeLbls[1].move(cols[4], rows[4])
-        self.timeLbls[1].setFont(newfont)
-
-        #Creates Speed Labels
-        self.speedLbls = [QLabel("Speed:",self),QLabel("Speed:",self)]
-        self.speedLbls[0].move(cols[0], rows[5])
-        self.speedLbls[0].setFont(newfont)
-        self.speedLbls[1].move(cols[4], rows[5])
-        self.speedLbls[1].setFont(newfont)
         
         #Makes the window
-        self.setGeometry(200, 200, 725, 550)
+        self.setGeometry(200, 200, 725, 250)
         self.setWindowTitle('Build-A-Fish')
         self.show()
 
@@ -191,8 +224,20 @@ class BeamGUI(QWidget):
         self.bodyTypes[n] = text
 
     def changeSpine(self, text, n):
-        #Changes the body type string
+        #Changes the spine type string
         self.spineTypes[n] = text
+        
+    def changeFin(self, text, n):
+        #Changes the fin type string
+        self.FinShapes[n] = text
+
+    def changeTail(self, text, n):
+        #Changes the tail type string
+        self.TailShapes[n] = text
+
+    def changeSpecial(self, text, n):
+        #Changes the special? string
+        self.SpecialFish[n] = text
 
     def enterName(self,n):
         self.names[n] = self.nameBoxes[n].text()
@@ -213,7 +258,9 @@ class BeamGUI(QWidget):
         for n in a:
             #Don't run if material and body haven't been set
             if self.materialTypes[n] == "- - -" or self.bodyTypes[n] == "- - -" \
-               or self.spineTypes[n] == "- - -" or self.names[n] == "":
+               or self.spineTypes[n] == "- - -" or self.FinShapes[n] == "- - -" \
+               or self.TailShapes[n] == "- - -" or self.SpecialFish[n] == "- - -" \
+               or self.names[n] == "":
                 self.statusLbls[n].setText("Set Body, Spine, Material, and Name")
                 self.statusLbls[n].adjustSize()
                 run = False
@@ -296,6 +343,7 @@ class BeamGUI(QWidget):
             print(startStr[:-1])
 
             self.firstData = False
+            
         else:
             timeCSV = open("/home/pi/Desktop/beamBreaks.csv","a")
 
@@ -362,7 +410,10 @@ class BeamGUI(QWidget):
                         #Writes to SQL datebase
                         cursor = conn.execute("SELECT MAX(ID) FROM SCORES")
                         for idNum in cursor:
-                            newID = idNum[0]+1
+                            try:
+                                newID = idNum[0]+1
+                            except:
+                                newID = 0
                         conn.execute("INSERT INTO SCORES (ID,NAME,SPEED,DAY,MONTH,YEAR) \
                                     VALUES (?, ?, ?, ?, ?, ?)",\
                                     (newID, self.names[n],speedArrays[n][-1], self.day, self.month, 2019));
@@ -383,15 +434,6 @@ class BeamGUI(QWidget):
                 #Gets the rounded values
                 roundTime = round(timeArrays[n][-1] - timeArrays[n][0],2)
                 roundSpeed = round(speedArrays[n][-1],2)
-                
-                #Changes the text
-                self.timeLbls[n].setText("Time: \n" + str(roundTime) + " secs")
-                self.speedLbls[n].setText("Speed: \n" + str(roundSpeed) + " cm/s")
-                self.statusLbls[n].setText("Done Running")
-                
-                self.timeLbls[n].adjustSize()
-                self.speedLbls[n].adjustSize()
-                self.statusLbls[n].adjustSize()
 
 def except_hook(cls, exception, traceback):
     sys.__excepthook__(cls, exception, traceback)
@@ -399,5 +441,5 @@ def except_hook(cls, exception, traceback):
 if __name__ == '__main__':
     sys.excepthook = except_hook
     app = QApplication(sys.argv)
-    ex = BeamGUI(bodyType = "- - -", materialType = "- - -", spineType = "- - -")
+    ex = BeamGUI()
     sys.exit(app.exec_())

@@ -95,7 +95,7 @@ class Example(QWidget):
 
 		conn.close()
 
-		self.DisplayType += 1
+		#self.DisplayType += 1
 
 		if self.firstRun:
 			self.firstRun = False
