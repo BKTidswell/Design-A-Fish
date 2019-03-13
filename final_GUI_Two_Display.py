@@ -4,11 +4,11 @@ import datetime
 import numpy as np
 import os
 import sys
+import serial
 from PyQt5.QtWidgets import (QWidget, QLabel,
     QComboBox, QApplication,QPushButton,QGridLayout,QLineEdit)
 from PyQt5.QtGui import QPainter, QColor, QBrush
 import PyQt5.QtGui as QtGui
-import sqlite3
 
 #The purpose of this code is to make it so that you can have as many
 # different beams as you like. Simply add the pin number where you have
@@ -27,6 +27,18 @@ distArrays = [[7,39.5,11.5,52.5,8.5],[7,39.5,11.5,52.5,8.5]]
 # Setting position Values
 rows = [10,75,125,175,225]
 cols = [10,100,200,300,425,525,615]
+
+#Bluetooth setup and functions
+bluetoothSerial1 = serial.Serial("/dev/rfcomm0", baudrate=9600)
+bluetoothSerial2 = serial.Serial("/dev/rfcomm1", baudrate=9600)
+
+bltSerials = [bluetoothSerial1,bluetoothSerial2]
+
+def startServo(bltNum):
+    bltSerials[bltNum].write(str.encode("1"))
+    
+def stopServo(bltNum):
+    bltSerials[bltNum].write(str.encode("0"))
 
 # Sets GPIO numbering mode and defines input PIN
 GPIO.setmode(GPIO.BOARD)
@@ -50,16 +62,6 @@ class BeamGUI(QWidget):
         self.firstData = True
         self.initUI()
         self.last_call = 0
-
-        #Time data for the SQL
-        now = datetime.datetime.now()
-        self.month = now.month
-        self.day = now.day
-    
-##        self.maxSpeed = 30
-##        self.R = 255
-##        self.G = 255
-##        self.B = 255
 
         self.states = [0,0]
 
@@ -331,34 +333,22 @@ class BeamGUI(QWidget):
         if self.firstData:
             timeCSV = open("/home/pi/Desktop/beamBreaks.csv","w")
             #Writes the CSV headers
-            startStr = "Body,Material,Spine"
+            startStr = "Name,Body,Material,Spine,TailShape,FinShape,Special,"
             for p in range(1,numPins+1):
                 startStr += "B"+str(p)+"Time,"
             for p in range(1,numPins):
                 startStr += "Speed"+str(p)+","
             for p in range(1,int(numPins/2)):
                 startStr += "Accel"+str(p)+","
+            startStr += "Time"
 
-            timeCSV.write(startStr[:-1]+"\n")
+            timeCSV.write(startStr+"\n")
             print(startStr[:-1])
 
             self.firstData = False
             
         else:
             timeCSV = open("/home/pi/Desktop/beamBreaks.csv","a")
-
-        conn = sqlite3.connect("scoreboard.db")
-
-        try:
-            conn.execute('''CREATE TABLE SCORES
-                         (ID INT PRIMARY KEY    NOT NULL,
-                         NAME            TEXT   NOT NULL,
-                         SPEED           REAL   NOT NULL,
-                         DAY             INTEGER NOT NULL,
-                         MONTH           INTERGER NOT NULL,
-                         YEAR            INTERGER);''')
-        except:
-            pass
             
         #Sets up the time and speed arrays
         timeArrays = [[0]*numPins,[0]*numPins]
@@ -368,8 +358,11 @@ class BeamGUI(QWidget):
         self.states = [0,0]
 
         for n in np.setdiff1d([0,1],a):
-            print(n)
             self.states[n] = -3
+
+        #start the motors
+        for n in a:
+            startServo(n)
 
         #What this does is step through the different IR receivers
         # one by one, and moves onto the next one once one beam has been
@@ -402,22 +395,17 @@ class BeamGUI(QWidget):
                     #If the last beam has been broken
                     if state == len(beamPins)-1:
                     #Create a string to write out to the CSV
-                        outStr = str(self.bodyTypes[n])+","+str(self.materialTypes[n])+","+str(self.spineTypes[n])+","
+                        #Time data for the CSV
+                        now = datetime.datetime.now()
+                        timeStr = str((now.replace(microsecond=0)))
+                        outStr = str(self.names[n])+","+str(self.bodyTypes[n])+","+str(self.materialTypes[n])+","+\
+                                 str(self.spineTypes[n])+","+str(self.TailShapes[n])+","+str(self.FinShapes[n])+","+\
+                                 str(self.SpecialFish[n])+","
                         for p in timeArrays[n]+speedArrays[n]+accelArrays[n]:
                             outStr += str(p) + ","
+                        outStr+=timeStr
                         #Write that string
-                        timeCSV.write(outStr[:-1]+"\n")
-                        #Writes to SQL datebase
-                        cursor = conn.execute("SELECT MAX(ID) FROM SCORES")
-                        for idNum in cursor:
-                            try:
-                                newID = idNum[0]+1
-                            except:
-                                newID = 0
-                        conn.execute("INSERT INTO SCORES (ID,NAME,SPEED,DAY,MONTH,YEAR) \
-                                    VALUES (?, ?, ?, ?, ?, ?)",\
-                                    (newID, self.names[n],speedArrays[n][-1], self.day, self.month, 2019));
-                        conn.commit()
+                        timeCSV.write(outStr+"\n")
                         #sets the state to -4
                         self.states[n] = -4
 
@@ -425,15 +413,15 @@ class BeamGUI(QWidget):
                     else:
                         self.states[n] += 1
 
-        #Closes the CSV and SQL files
+        #Closes the CSV file
         timeCSV.close()
-        conn.close()
 
         for n in a:
             if self.states[n] != -2:
-                #Gets the rounded values
-                roundTime = round(timeArrays[n][-1] - timeArrays[n][0],2)
-                roundSpeed = round(speedArrays[n][-1],2)
+                #Says that it is finished
+                stopServo(n)
+                self.statusLbls[n].setText("Done Running")
+                self.statusLbls[n].adjustSize()
 
 def except_hook(cls, exception, traceback):
     sys.__excepthook__(cls, exception, traceback)
