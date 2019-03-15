@@ -29,16 +29,30 @@ rows = [10,75,125,175,225]
 cols = [10,100,200,300,425,525,615]
 
 #Bluetooth setup and functions
-bluetoothSerial1 = serial.Serial("/dev/rfcomm0", baudrate=9600)
-bluetoothSerial2 = serial.Serial("/dev/rfcomm1", baudrate=9600)
-
-bltSerials = [bluetoothSerial1,bluetoothSerial2]
-
-def startServo(bltNum):
-    bltSerials[bltNum].write(str.encode("1"))
+#Checks to find if both are working
+def ConnectBluetooth():
+    bltOn = [False,False]
+    try:
+        bluetoothSerial1 = serial.Serial("/dev/rfcomm0", baudrate=9600)
+        bltOn[0] = True
+    except:
+        bluetoothSerial1 = "No"
+        
+    try:
+        bluetoothSerial2 = serial.Serial("/dev/rfcomm1", baudrate=9600)
+        bltOn[1] = True
+    except:
+        bluetoothSerial2 = "No"
+        
+    bltSerials = [bluetoothSerial1,bluetoothSerial2]
     
-def stopServo(bltNum):
-    bltSerials[bltNum].write(str.encode("0"))
+    return(bltOn,bltSerials)
+
+def startServo(bltSerial):
+    bltSerial.write(str.encode("1"))
+    
+def stopServo(bltSerial):
+    bltSerial.write(str.encode("0"))
 
 # Sets GPIO numbering mode and defines input PIN
 GPIO.setmode(GPIO.BOARD)
@@ -50,6 +64,9 @@ class BeamGUI(QWidget):
 
     def __init__(self):
         super().__init__()
+        #Tries to get bluetooth connected
+        (self.bltOn,self.bltSerials) = ConnectBluetooth()
+        
         #initializes varibles that will be needed in different
         # functions and places
         self.materialTypes = ["- - -","- - -"]
@@ -251,11 +268,13 @@ class BeamGUI(QWidget):
             self.statusLbls[n].setText("Run Canceled!")
             self.statusLbls[n].adjustSize()
             self.goButtons[n].setEnabled(True)
+            stopServo(self.bltSerials[n])
             self.states[n] = -2
         app.processEvents()
 
     def runTrials(self, a):
-        run = False
+        run = [False,False]
+        ready = True
 
         for n in a:
             #Don't run if material and body haven't been set
@@ -263,15 +282,30 @@ class BeamGUI(QWidget):
                or self.spineTypes[n] == "- - -" or self.FinShapes[n] == "- - -" \
                or self.TailShapes[n] == "- - -" or self.SpecialFish[n] == "- - -" \
                or self.names[n] == "":
-                self.statusLbls[n].setText("Set Body, Spine, Material, and Name")
+                self.statusLbls[n].setText("Set Drop down Menus")
                 self.statusLbls[n].adjustSize()
-                run = False
+                run[n] = False
             else:
                 self.statusLbls[n].setText("Set other side")
                 self.statusLbls[n].adjustSize()
-                run = True
+                run[n] = True
+
+            #Checks if bluetooth is connected
+            if run:
+                (self.bltOn,self.bltSerials) = ConnectBluetooth()
+                if not self.bltOn[n]:
+                    self.statusLbls[n].setText("Connect Bluetooth")
+                    self.statusLbls[n].adjustSize()
+                    run[n] = False
+                else:
+                    self.statusLbls[n].setText("Connect other Bluetooth")
+                    self.statusLbls[n].adjustSize()
+                    run[n] = True
+
+        for n in a:
+            ready = ready and run[n]
             
-        if run:
+        if ready:
             #prevent button from being clicked too much
             if time.time() - self.last_call < 1:
                 return
@@ -293,7 +327,7 @@ class BeamGUI(QWidget):
                 self.last_calls = time.time()
 
     # Defines a function to print alignments
-    def printAlignString(self,beam_a):
+    def printAlignString(self,beam_a,n):
         outString = "Align these beams:"
         brokenBeams = np.where(beam_a == 0)
         #if the length of the list of broken beams is greater than 0
@@ -302,13 +336,13 @@ class BeamGUI(QWidget):
             # need to be realigned
             for b in brokenBeams:
                 outString += " " + str(b+1)[1:-1]
-            self.statusLbls[0].setText(outString)
-            self.statusLbls[0].adjustSize()
+            self.statusLbls[n].setText(outString)
+            self.statusLbls[n].adjustSize()
             return(False)
         else:
         #Otherwise let the person know that the beams are aligned
-            self.statusLbls[0].setText("All beams are aligned")
-            self.statusLbls[0].adjustSize()
+            self.statusLbls[n].setText("All beams are aligned")
+            self.statusLbls[n].adjustSize()
             return(True)
 
     #Checks that the beams are in alignment, and lets you know
@@ -317,10 +351,11 @@ class BeamGUI(QWidget):
         #Updates the status string
         self.statusLbls[0].setText("Checking Setup")
         self.statusLbls[0].adjustSize()
-        #gets the input for each beam
-        beamState = np.asarray([GPIO.input(b) for b in beamPins])
-        #Show the new beam state
-        aligned = self.printAlignString(beamState)
+        #gets the input for each beam on each tank
+        for i in range(2):
+            beamState = np.asarray([GPIO.input(b) for b in beamPinsArray[i]])
+            #Show the new beam state
+            aligned = self.printAlignString(beamState,i)
 
     #This function is for getting the times of the breaks and the speeds
     # from that and the distance
@@ -331,7 +366,7 @@ class BeamGUI(QWidget):
         numPins = len(beamPinsArray[0])
         
         if self.firstData:
-            timeCSV = open("/home/pi/Desktop/beamBreaks.csv","w")
+            timeCSV = open("/home/pi/Desktop/Design-A-Fish/beamBreaks.csv","w")
             #Writes the CSV headers
             startStr = "Name,Body,Material,Spine,TailShape,FinShape,Special,"
             for p in range(1,numPins+1):
@@ -348,7 +383,7 @@ class BeamGUI(QWidget):
             self.firstData = False
             
         else:
-            timeCSV = open("/home/pi/Desktop/beamBreaks.csv","a")
+            timeCSV = open("/home/pi/Desktop/Design-A-Fish/beamBreaks.csv","a")
             
         #Sets up the time and speed arrays
         timeArrays = [[0]*numPins,[0]*numPins]
@@ -362,7 +397,7 @@ class BeamGUI(QWidget):
 
         #start the motors
         for n in a:
-            startServo(n)
+            startServo(self.bltSerials[n])
 
         #What this does is step through the different IR receivers
         # one by one, and moves onto the next one once one beam has been
@@ -419,7 +454,7 @@ class BeamGUI(QWidget):
         for n in a:
             if self.states[n] != -2:
                 #Says that it is finished
-                stopServo(n)
+                stopServo(self.bltSerials[n])
                 self.statusLbls[n].setText("Done Running")
                 self.statusLbls[n].adjustSize()
 
